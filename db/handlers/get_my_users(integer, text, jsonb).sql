@@ -13,13 +13,13 @@ begin
 
   for v_user in
     select login
-  from users
-  where group_id in (
+    from data.users
+    where group_id in (
       select group_id
-    from user_groups
-    where user_id = in_user_id)
+      from data.user_groups
+      where user_id = in_user_id)
   loop
-    v_response := v_response || v_user;
+    v_response := v_response || to_jsonb(v_user);
   end loop;
 
   return api_utils.create_response(200, jsonb_build_object('Content-Type', 'application/json'), v_response);

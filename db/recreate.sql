@@ -69,16 +69,15 @@ security definer
 as
 $$
 declare
-  v_user_id integer := data.get_user_id(in_user, in_password);
+  v_user_id integer;
   v_function_name text;
+  v_authorized_only boolean;
   v_result jsonb;
 begin
-  if v_user_id is null then
-    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
-  end if;
+  v_user_id := data.get_user_id(in_user, in_password);
 
-  select function_name
-  into v_function_name
+  select function_name, authorized_only
+  into v_function_name, v_authorized_only
   from data.handlers
   where
     method = lower(in_method) and
@@ -86,6 +85,10 @@ begin
 
   if v_function_name is null then
     return api_utils.create_response(404);
+  end if;
+
+  if v_authorized_only and v_user_id is null then
+    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
   end if;
 
   execute format('select * from handlers.%s($1, $2, $3)', v_function_name)
@@ -101,9 +104,9 @@ end;
 $$
 language plpgsql;
 
--- drop function api_utils.create_response(integer, jsonb, text);
+-- drop function api_utils.create_response(integer, jsonb, jsonb);
 
-create or replace function api_utils.create_response(in_code integer, in_headers jsonb default null::jsonb, in_body text default null::text)
+create or replace function api_utils.create_response(in_code integer, in_headers jsonb default null::jsonb, in_body jsonb default null::jsonb)
 returns jsonb
 immutable
 as
@@ -187,7 +190,10 @@ declare
   v_salt text;
   v_hash text;
 begin
-  assert in_login is not null;
+  if in_login is null then
+    return null;
+  end if;
+
   assert in_password is not null;
 
   select id, salt, hash
@@ -202,7 +208,7 @@ begin
   assert v_salt is not null;
   assert v_hash is not null;
 
-  if v_hash != pgcrypto.digest(pgcrypto.digest(in_password, 'sha512') || v_salt, 'sha512') then
+  if v_hash != pgcrypto.digest(pgcrypto.digest(in_password, 'sha512') || v_salt, 'sha512')::text then
     return null;
   end if;
 
@@ -270,17 +276,17 @@ begin
 
   if v_user_id != in_user_id then
     declare
-    v_is_user_manager boolean;
-  begin
-    select true
-    into v_is_user_manager
-    from data.users
-    where id = in_user_id and is_user_manager = true;
+      v_is_user_manager boolean;
+    begin
+      select true
+      into v_is_user_manager
+      from data.users
+      where id = in_user_id and is_user_manager = true;
 
-    if v_is_user_manager is null then
-      return api_utils.create_response(404);
-    end if;
-  end;
+      if v_is_user_manager is null then
+        return api_utils.create_response(404);
+      end if;
+    end;
   end if;
 
   delete from data.group_groups
@@ -335,23 +341,23 @@ begin
   from data.expenses
   where
     code = v_expense and
-  user_id = v_user_id;
+    user_id = v_user_id;
 
   if v_expense_id is null then
     return api_utils.create_response(404);
   end if;
 
   if v_user_id != in_user_id then
-  select true
-  into v_can_be_deleted
-  from data.user_groups
-  where
-    user_id = in_user_in and
-    group_id = v_group_id;
+    select true
+    into v_can_be_deleted
+    from data.user_groups
+    where
+      user_id = in_user_id and
+      group_id = v_group_id;
 
-  if v_can_be_deleted is null then
-    return api_utils.create_response(404);
-  end if;
+    if v_can_be_deleted is null then
+      return api_utils.create_response(404);
+    end if;
   end if;
 
   delete from data.expenses
@@ -377,13 +383,13 @@ begin
 
   for v_user in
     select login
-  from users
-  where group_id in (
+    from data.users
+    where group_id in (
       select group_id
-    from user_groups
-    where user_id = in_user_id)
+      from data.user_groups
+      where user_id = in_user_id)
   loop
-    v_response := v_response || v_user;
+    v_response := v_response || to_jsonb(v_user);
   end loop;
 
   return api_utils.create_response(200, jsonb_build_object('Content-Type', 'application/json'), v_response);
@@ -419,17 +425,17 @@ begin
 
   if v_user_id != in_user_id then
     declare
-    v_is_user_manager boolean;
-  begin
-    select true
-    into v_is_user_manager
-    from data.users
-    where id = in_user_id and is_user_manager = true;
+      v_is_user_manager boolean;
+    begin
+      select true
+      into v_is_user_manager
+      from data.users
+      where id = in_user_id and is_user_manager = true;
 
-    if v_is_user_manager is null then
-      return api_utils.create_response(404);
-    end if;
-  end;
+      if v_is_user_manager is null then
+        return api_utils.create_response(404);
+      end if;
+    end;
   end if;
 
   return api_utils.create_response(200, jsonb_build_object('Content-Type', 'application/json'), v_response);
@@ -473,18 +479,18 @@ begin
 
   select
     id,
-  jsonb_build_object(
-    'id', code,
+    jsonb_build_object(
+      'id', code,
       'author', v_login,
-    'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
-    'description', description,
-    'amount', amount,
-    'comment', comment)
+      'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+      'description', description,
+      'amount', amount,
+      'comment', comment)
   into v_expense_id, v_response
   from data.expenses
   where
     code = v_expense and
-  user_id = v_user_id;
+    user_id = v_user_id;
 
   if v_expense_id is null then
     return api_utils.create_response(404);
@@ -495,8 +501,8 @@ begin
     into v_expense_visible
     from data.user_groups
     where
-      user_id = in_user_in and
-    group_id = v_group_id;
+      user_id = in_user_id and
+      group_id = v_group_id;
 
     if v_expense_visible is null then
       return api_utils.create_response(404);
@@ -538,35 +544,35 @@ begin
 
   if v_user_id != in_user_id then
     declare
-    v_user_expenses_visible boolean;
-  begin
-    select true
-    into v_user_expenses_visible
-    from data.user_groups
-    where
-    user_id = in_user_in and
-    group_id = v_group_id;
+      v_user_expenses_visible boolean;
+    begin
+      select true
+      into v_user_expenses_visible
+      from data.user_groups
+      where
+        user_id = in_user_id and
+        group_id = v_group_id;
 
-    if v_user_expenses_visible is null then
-      return api_utils.create_response(404);
-    end if;
-  end;
+      if v_user_expenses_visible is null then
+        return api_utils.create_response(404);
+      end if;
+    end;
   end if;
 
   v_response := '[]'::jsonb;
 
   for v_expense in
     select
-    jsonb_build_object(
-    'id', code,
-    'author', v_login,
-    'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
-    'description', description,
-    'amount', amount,
-    'comment', comment)
-  from data.expenses
-  where user_id = v_user_id
-  order by id
+      jsonb_build_object(
+      'id', code,
+      'author', v_login,
+      'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+      'description', description,
+      'amount', amount,
+      'comment', comment)
+    from data.expenses
+    where user_id = v_user_id
+    order by id
   loop
     v_response := v_response || v_expense;
   end loop;
@@ -599,13 +605,13 @@ begin
 
   if v_is_user_manager then
     for v_user in
-    select jsonb_build_object('login', login, 'is_user_manager', is_user_manager)
-    from data.users
-    where user_id != in_user_id
-    order by login
-  loop
-    v_response := v_response || v_user;
-  end loop;
+      select jsonb_build_object('login', login, 'is_user_manager', is_user_manager)
+      from data.users
+      where id != in_user_id
+      order by login
+    loop
+      v_response := v_response || v_user;
+    end loop;
   end if;
 
   return api_utils.create_response(200, jsonb_build_object('Content-Type', 'application/json'), v_response);
@@ -629,7 +635,6 @@ declare
   v_password text;
   v_user_data_can_be_changed boolean;
 begin
-  assert in_user_id is not null;
   assert in_params is not null;
 
   select unnest(regexp_matches(in_path, '^/users/([^/]+)/?$'))
@@ -643,15 +648,19 @@ begin
   v_password := json.get_string_opt(in_params, 'password', null);
   v_new_is_user_manager := json.get_boolean_opt(in_params, 'is_user_manager', null);
 
-  if (v_new_is_user_manager is not null and v_new_is_user_manager) or (v_user_id is not null and v_user_id != in_user_id) then
-    select true
-  into v_user_data_can_be_changed
-  from data.users
-  where id = in_user_id and is_user_manager is true;
+  if (v_new_is_user_manager is not null and v_new_is_user_manager) or (v_user_id is not null and (in_user_id is null or v_user_id != in_user_id)) then
+    if in_user_id is null then
+      return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
+    end if;
 
-  if v_user_data_can_be_changed is null then
+    select true
+    into v_user_data_can_be_changed
+    from data.users
+    where id = in_user_id and is_user_manager is true;
+
+    if v_user_data_can_be_changed is null then
       return api_utils.create_response(403);
-  end if;
+    end if;
   end if;
 
   if v_user_id is null then
@@ -659,12 +668,12 @@ begin
       return api_utils.create_response(400);
     end if;
 
-  if v_new_is_user_manager is null then
-    v_new_is_user_manager := false;
-  end if;
+    if v_new_is_user_manager is null then
+      v_new_is_user_manager := false;
+    end if;
 
-  perform data.create_user(v_login, v_password, v_new_is_user_manager);
-  return api_utils.create_response(201);
+    perform data.create_user(v_login, v_password, v_new_is_user_manager);
+    return api_utils.create_response(201);
   end if;
 
   if v_is_user_manager is not null and v_is_user_manager != v_new_is_user_manager then
@@ -675,7 +684,7 @@ begin
 
   if v_password is not null then
     update data.users
-  set hash = pgcrypto.digest(pgcrypto.digest(v_password, 'sha512') || v_salt, 'sha512')
+    set hash = pgcrypto.digest(pgcrypto.digest(v_password, 'sha512') || v_salt, 'sha512')
     where id = v_user_id;
   end if;
 
@@ -728,7 +737,7 @@ begin
     into v_can_be_edited
     from data.user_groups
     where
-      user_id = in_user_in and
+      user_id = in_user_id and
       group_id = v_group_id;
 
     if v_can_be_edited is null then
@@ -758,17 +767,17 @@ begin
 
   if v_expense_id is null then
     insert into data.expenses(code, user_id, event_time, description, amount, comment)
-  values(v_expense, v_user_id, v_time, v_description, v_amount, v_comment);
+    values(v_expense, v_user_id, v_time, v_description, v_amount, v_comment);
 
-  return api_utils.create_response(201);
+    return api_utils.create_response(201);
   end if;
 
   update data.expenses
   set
     event_time = v_time,
-  description = v_description,
-  amount = v_amount,
-  comment = v_comment
+    description = v_description,
+    amount = v_amount,
+    comment = v_comment
   where id = v_expense_id;
 
   return api_utils.create_response(204);
@@ -776,22 +785,22 @@ end;
 $$
 language plpgsql;
 
--- drop function json.get_boolean_opt(json, text, boolean);
+-- drop function json.get_boolean_opt(jsonb, text, boolean);
 
-create or replace function json.get_boolean_opt(in_json json, in_name text, in_default boolean)
+create or replace function json.get_boolean_opt(in_json jsonb, in_name text, in_default boolean)
 returns boolean
 immutable
 as
 $$
 declare
-  v_param json;
+  v_param jsonb;
   v_param_type text;
 begin
   assert in_name is not null;
 
   v_param := json.get_object(in_json)->in_name;
 
-  v_param_type := json_typeof(v_param);
+  v_param_type := jsonb_typeof(v_param);
 
   if v_param_type is null or v_param_type = 'null' then
     return in_default;
@@ -993,6 +1002,7 @@ create table data.handlers(
   method text not null,
   path text not null,
   function_name text not null,
+  authorized_only boolean not null,
   constraint handlers_pk primary key(id),
   constraint handlers_unique_method_path unique(method, path)
 );
@@ -1048,24 +1058,31 @@ create index expenses_idx_user_id on data.expenses(user_id);
 
 -- Initial data
 
-insert into data.groups(name) values('admins'); --1
+insert into data.groups(name) values('admins'); -- 1
 
 select data.create_user('admin', 'admin', true); -- 1
 
-insert into data.user_groups(user_id, group_id)
-values(1, 1);
+insert into data.group_groups(group_id, parent_group_id) values(2, 1);
+insert into data.user_groups(user_id, group_id) values(1, 1);
 
-insert into data.handlers(method, path, function_name)
+select data.create_user('user_manager', 'user_manager', true);
+select data.create_user('user', 'user', false);
+select data.create_user('extended_user', 'extended_user', false); -- 4
+
+insert into data.group_groups(group_id, parent_group_id) values(5, 4);
+insert into data.user_groups(user_id, group_id) values(4, 4);
+
+insert into data.handlers(method, path, function_name, authorized_only)
 values
-  ('get', '^/users/?$', 'get_users'),
-  ('get', '^/my_users/?$', 'get_my_users'),
-  ('get', '^/users/[^/]+/?$', 'get_user'),
-  ('get', '^/expenses/[^/]+/?$', 'get_user_expenses'),
-  ('get', '^/expenses/[^/]+/[^/]+/?$', 'get_user_expense'),
-  ('put', '^/users/[^/]+/?$', 'put_user'),
-  ('put', '^/expenses/[^/]+/[^/]+/?$', 'put_user_expense'),
-  ('delete', '^/users/[^/]+/?$', 'delete_user'),
-  ('delete', '^/expenses/[^/]+/[^/]+/?$', 'delete_user_expense');
+  ('get', '^/users/?$', 'get_users', true),
+  ('get', '^/my_users/?$', 'get_my_users', true),
+  ('get', '^/users/[^/]+/?$', 'get_user', true),
+  ('get', '^/expenses/[^/]+/?$', 'get_user_expenses', true),
+  ('get', '^/expenses/[^/]+/[^/]+/?$', 'get_user_expense', true),
+  ('put', '^/users/[^/]+/?$', 'put_user', false),
+  ('put', '^/expenses/[^/]+/[^/]+/?$', 'put_user_expense', true),
+  ('delete', '^/users/[^/]+/?$', 'delete_user', true),
+  ('delete', '^/expenses/[^/]+/[^/]+/?$', 'delete_user_expense', true);
 
 drop role if exists http;
 create role http noinherit login password 'http';

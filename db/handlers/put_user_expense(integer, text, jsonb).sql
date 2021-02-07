@@ -42,7 +42,7 @@ begin
     into v_can_be_edited
     from data.user_groups
     where
-      user_id = in_user_in and
+      user_id = in_user_id and
       group_id = v_group_id;
 
     if v_can_be_edited is null then
@@ -72,17 +72,17 @@ begin
 
   if v_expense_id is null then
     insert into data.expenses(code, user_id, event_time, description, amount, comment)
-  values(v_expense, v_user_id, v_time, v_description, v_amount, v_comment);
+    values(v_expense, v_user_id, v_time, v_description, v_amount, v_comment);
 
-  return api_utils.create_response(201);
+    return api_utils.create_response(201);
   end if;
 
   update data.expenses
   set
     event_time = v_time,
-  description = v_description,
-  amount = v_amount,
-  comment = v_comment
+    description = v_description,
+    amount = v_amount,
+    comment = v_comment
   where id = v_expense_id;
 
   return api_utils.create_response(204);

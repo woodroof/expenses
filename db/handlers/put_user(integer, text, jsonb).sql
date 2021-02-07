@@ -14,7 +14,6 @@ declare
   v_password text;
   v_user_data_can_be_changed boolean;
 begin
-  assert in_user_id is not null;
   assert in_params is not null;
 
   select unnest(regexp_matches(in_path, '^/users/([^/]+)/?$'))
@@ -28,15 +27,19 @@ begin
   v_password := json.get_string_opt(in_params, 'password', null);
   v_new_is_user_manager := json.get_boolean_opt(in_params, 'is_user_manager', null);
 
-  if (v_new_is_user_manager is not null and v_new_is_user_manager) or (v_user_id is not null and v_user_id != in_user_id) then
-    select true
-  into v_user_data_can_be_changed
-  from data.users
-  where id = in_user_id and is_user_manager is true;
+  if (v_new_is_user_manager is not null and v_new_is_user_manager) or (v_user_id is not null and (in_user_id is null or v_user_id != in_user_id)) then
+    if in_user_id is null then
+      return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
+    end if;
 
-  if v_user_data_can_be_changed is null then
+    select true
+    into v_user_data_can_be_changed
+    from data.users
+    where id = in_user_id and is_user_manager is true;
+
+    if v_user_data_can_be_changed is null then
       return api_utils.create_response(403);
-  end if;
+    end if;
   end if;
 
   if v_user_id is null then
@@ -44,12 +47,12 @@ begin
       return api_utils.create_response(400);
     end if;
 
-  if v_new_is_user_manager is null then
-    v_new_is_user_manager := false;
-  end if;
+    if v_new_is_user_manager is null then
+      v_new_is_user_manager := false;
+    end if;
 
-  perform data.create_user(v_login, v_password, v_new_is_user_manager);
-  return api_utils.create_response(201);
+    perform data.create_user(v_login, v_password, v_new_is_user_manager);
+    return api_utils.create_response(201);
   end if;
 
   if v_is_user_manager is not null and v_is_user_manager != v_new_is_user_manager then
@@ -60,7 +63,7 @@ begin
 
   if v_password is not null then
     update data.users
-  set hash = pgcrypto.digest(pgcrypto.digest(v_password, 'sha512') || v_salt, 'sha512')
+    set hash = pgcrypto.digest(pgcrypto.digest(v_password, 'sha512') || v_salt, 'sha512')
     where id = v_user_id;
   end if;
 

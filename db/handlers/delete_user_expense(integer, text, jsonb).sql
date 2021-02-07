@@ -36,23 +36,23 @@ begin
   from data.expenses
   where
     code = v_expense and
-  user_id = v_user_id;
+    user_id = v_user_id;
 
   if v_expense_id is null then
     return api_utils.create_response(404);
   end if;
 
   if v_user_id != in_user_id then
-  select true
-  into v_can_be_deleted
-  from data.user_groups
-  where
-    user_id = in_user_in and
-    group_id = v_group_id;
+    select true
+    into v_can_be_deleted
+    from data.user_groups
+    where
+      user_id = in_user_id and
+      group_id = v_group_id;
 
-  if v_can_be_deleted is null then
-    return api_utils.create_response(404);
-  end if;
+    if v_can_be_deleted is null then
+      return api_utils.create_response(404);
+    end if;
   end if;
 
   delete from data.expenses

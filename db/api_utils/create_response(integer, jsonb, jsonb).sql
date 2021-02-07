@@ -1,6 +1,6 @@
--- drop function api_utils.create_response(integer, jsonb, text);
+-- drop function api_utils.create_response(integer, jsonb, jsonb);
 
-create or replace function api_utils.create_response(in_code integer, in_headers jsonb default null::jsonb, in_body text default null::text)
+create or replace function api_utils.create_response(in_code integer, in_headers jsonb default null::jsonb, in_body jsonb default null::jsonb)
 returns jsonb
 immutable
 as

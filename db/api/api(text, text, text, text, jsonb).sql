@@ -7,16 +7,15 @@ security definer
 as
 $$
 declare
-  v_user_id integer := data.get_user_id(in_user, in_password);
+  v_user_id integer;
   v_function_name text;
+  v_authorized_only boolean;
   v_result jsonb;
 begin
-  if v_user_id is null then
-    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
-  end if;
+  v_user_id := data.get_user_id(in_user, in_password);
 
-  select function_name
-  into v_function_name
+  select function_name, authorized_only
+  into v_function_name, v_authorized_only
   from data.handlers
   where
     method = lower(in_method) and
@@ -24,6 +23,10 @@ begin
 
   if v_function_name is null then
     return api_utils.create_response(404);
+  end if;
+
+  if v_authorized_only and v_user_id is null then
+    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
   end if;
 
   execute format('select * from handlers.%s($1, $2, $3)', v_function_name)

@@ -26,17 +26,17 @@ begin
 
   if v_user_id != in_user_id then
     declare
-    v_is_user_manager boolean;
-  begin
-    select true
-    into v_is_user_manager
-    from data.users
-    where id = in_user_id and is_user_manager = true;
+      v_is_user_manager boolean;
+    begin
+      select true
+      into v_is_user_manager
+      from data.users
+      where id = in_user_id and is_user_manager = true;
 
-    if v_is_user_manager is null then
-      return api_utils.create_response(404);
-    end if;
-  end;
+      if v_is_user_manager is null then
+        return api_utils.create_response(404);
+      end if;
+    end;
   end if;
 
   delete from data.group_groups

@@ -10,7 +10,10 @@ declare
   v_salt text;
   v_hash text;
 begin
-  assert in_login is not null;
+  if in_login is null then
+    return null;
+  end if;
+
   assert in_password is not null;
 
   select id, salt, hash
@@ -25,7 +28,7 @@ begin
   assert v_salt is not null;
   assert v_hash is not null;
 
-  if v_hash != pgcrypto.digest(pgcrypto.digest(in_password, 'sha512') || v_salt, 'sha512') then
+  if v_hash != pgcrypto.digest(pgcrypto.digest(in_password, 'sha512') || v_salt, 'sha512')::text then
     return null;
   end if;
 

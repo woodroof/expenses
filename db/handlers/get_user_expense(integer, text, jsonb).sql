@@ -34,18 +34,18 @@ begin
 
   select
     id,
-  jsonb_build_object(
-    'id', code,
+    jsonb_build_object(
+      'id', code,
       'author', v_login,
-    'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
-    'description', description,
-    'amount', amount,
-    'comment', comment)
+      'date', to_char(event_time at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+      'description', description,
+      'amount', amount,
+      'comment', comment)
   into v_expense_id, v_response
   from data.expenses
   where
     code = v_expense and
-  user_id = v_user_id;
+    user_id = v_user_id;
 
   if v_expense_id is null then
     return api_utils.create_response(404);
@@ -56,8 +56,8 @@ begin
     into v_expense_visible
     from data.user_groups
     where
-      user_id = in_user_in and
-    group_id = v_group_id;
+      user_id = in_user_id and
+      group_id = v_group_id;
 
     if v_expense_visible is null then
       return api_utils.create_response(404);

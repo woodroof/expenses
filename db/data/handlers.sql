@@ -5,6 +5,7 @@ create table data.handlers(
   method text not null,
   path text not null,
   function_name text not null,
+  authorized_only boolean not null,
   constraint handlers_pk primary key(id),
   constraint handlers_unique_method_path unique(method, path)
 );

@@ -21,13 +21,13 @@ begin
 
   if v_is_user_manager then
     for v_user in
-    select jsonb_build_object('login', login, 'is_user_manager', is_user_manager)
-    from data.users
-    where user_id != in_user_id
-    order by login
-  loop
-    v_response := v_response || v_user;
-  end loop;
+      select jsonb_build_object('login', login, 'is_user_manager', is_user_manager)
+      from data.users
+      where id != in_user_id
+      order by login
+    loop
+      v_response := v_response || v_user;
+    end loop;
   end if;
 
   return api_utils.create_response(200, jsonb_build_object('Content-Type', 'application/json'), v_response);
