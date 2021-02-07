@@ -88,7 +88,7 @@ begin
   end if;
 
   if v_authorized_only and v_user_id is null then
-    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
+    return api_utils.create_unauthorized_response();
   end if;
 
   execute format('select * from handlers.%s($1, $2, $3)', v_function_name)
@@ -125,6 +125,19 @@ begin
   end if;
 
   return v_retval;
+end;
+$$
+language plpgsql;
+
+-- drop function api_utils.create_unauthorized_response();
+
+create or replace function api_utils.create_unauthorized_response()
+returns jsonb
+immutable
+as
+$$
+begin
+  return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker", charset="UTF-8"'));
 end;
 $$
 language plpgsql;
@@ -650,7 +663,7 @@ begin
 
   if (v_new_is_user_manager is not null and v_new_is_user_manager) or (v_user_id is not null and (in_user_id is null or v_user_id != in_user_id)) then
     if in_user_id is null then
-      return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
+      return api_utils.create_unauthorized_response();
     end if;
 
     select true

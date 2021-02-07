@@ -26,7 +26,7 @@ begin
   end if;
 
   if v_authorized_only and v_user_id is null then
-    return api_utils.create_response(401, jsonb_build_object('WWW-Authenticate', 'Basic realm="Expenses tracker"'));
+    return api_utils.create_unauthorized_response();
   end if;
 
   execute format('select * from handlers.%s($1, $2, $3)', v_function_name)
