@@ -396,11 +396,17 @@ begin
 
   for v_user in
     select login
+  from data.users
+  where id = in_user_id
+  union all
+    select login
     from data.users
     where group_id in (
       select group_id
       from data.user_groups
-      where user_id = in_user_id)
+      where user_id = in_user_id) and
+    id != in_user_id
+  order by login
   loop
     v_response := v_response || to_jsonb(v_user);
   end loop;
