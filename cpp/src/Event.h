@@ -4,6 +4,7 @@
 
 struct Event
 {
+	QString id;
 	QString time;
 	QString description;
 	uint64_t amount;
